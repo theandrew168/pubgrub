@@ -1,6 +1,7 @@
 # Custom ignores
 .clj-kondo/
 .lsp/
+.calva/
 
 # Default ignores
 pom.xml
