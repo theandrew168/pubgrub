@@ -1,5 +1,7 @@
 (ns pubgrub.core
-  (:require [clojure.string :as str]))
+  (:require [clojure.data.json :as json]
+            [clojure.string :as str]
+            [org.httpkit.client :as hk-client]))
 
 ;;;; References:
 ;;;; https://nex3.medium.com/pubgrub-2fb6470504f
@@ -51,6 +53,28 @@
   (let [z (zip-versions a b)]
     (every? #(apply = %) z)))
 
+(defn npm-registry-url
+  []
+  "https://registry.npmjs.org")
+
+(defn npm-package-url
+  [package]
+  (format "%s/%s" (npm-registry-url) package))
+
+(defn npm-package-version-url
+  [package version]
+  (format "%s/%s/%s" (npm-registry-url) package version))
+
+(defn npm-package-version-request
+  [package version]
+  {:url (npm-package-version-url package version)
+   :method :get})
+
+(defn fetch!
+  [req]
+  (let [resp (hk-client/request req)]
+    @resp))
+
 (comment
 
   (concat [1 2 3] (take 2 (repeat 0)))
@@ -62,6 +86,25 @@
   (extend-version (make-version "1.2.3") 5)
   (extend-version (make-version "1.2.3") 3)
   (zip-versions (make-version "1") (make-version "1.2.3"))
+  (equal-versions? (make-version "1") (make-version "1.0.0"))
   (equal-versions? (make-version "1") (make-version "1.0.1"))
+
+  (npm-registry-url)
+  (npm-package-url "tar")
+  (npm-package-version-url "tar" "7.4.3")
+  (npm-package-version-request "tar" "7.4.3")
+
+  (def req (npm-package-version-request "tar" "7.4.3"))
+  req
+
+  (def resp (fetch! req))
+  resp
+
+  (def body (resp :body))
+  body
+
+  (def info (json/read-str body))
+  info
+  (info "dependencies")
 
   :rcf)
