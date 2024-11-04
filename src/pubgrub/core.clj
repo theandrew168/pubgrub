@@ -28,8 +28,8 @@
 ;;;; incompatibilities. Through phases of "unit propagation", "conflict resolution", and
 ;;;; "decision making", a solution is hopefully found (complete, partial, or none).
 
-(defn make-version
-  "Make a new version (sequence of integers)."
+(defn parse-version
+  "Parse a new version (sequence of integers)."
   [s]
   (map #(Integer/parseInt %) (str/split s #"\.")))
 
@@ -53,6 +53,72 @@
   (let [z (zip-versions a b)]
     (every? #(apply = %) z)))
 
+(defn make-term
+  [package version constraint negative?]
+  {:package package
+   :version version
+   ; :exact :major :minor :lt :lte :gt :gte
+   :constraint constraint
+   :negative? negative?})
+
+(defn parse-constraint
+  [s]
+  (cond
+    (str/starts-with? s "^") :major
+    (str/starts-with? s "~") :minor
+    (str/starts-with? s "<=") :lte
+    (str/starts-with? s ">=") :gte
+    (str/starts-with? s "<") :lt
+    (str/starts-with? s ">") :gt
+    :else :exact))
+
+(defn strip-constraint
+  [s]
+  (let [constraint (parse-constraint s)]
+    (case constraint
+      :major (subs s 1)
+      :minor (subs s 1)
+      :lte (subs s 2)
+      :gte (subs s 2)
+      :lt (subs s 1)
+      :gt (subs s 1)
+      :exact s)))
+
+(defn parse-term
+  [s]
+  (let [fields (str/split s #"\s+")
+        length (count fields)
+        negative? (= 3 length)
+        package (if negative? (get fields 1) (get fields 0))
+        raw-version (if negative? (get fields 2) (get fields 1))
+        constraint (parse-constraint raw-version)
+        version (parse-version (strip-constraint raw-version))]
+    (make-term package version constraint negative?)))
+
+(defn term-package
+  [term]
+  (term :package))
+
+(defn term-version
+  [term]
+  (term :version))
+
+(defn term-constraint
+  [term]
+  (term :contraint))
+
+(defn term-negative?
+  [term]
+  (term :negative?))
+
+(defn term-satisfies?
+  [terms term]
+  nil)
+
+(defn term-contradicts?
+  [terms term]
+  nil)
+
 (defn npm-registry-url
   []
   "https://registry.npmjs.org")
@@ -75,6 +141,19 @@
   (let [resp (hk-client/request req)]
     @resp))
 
+(def memo-fetch! (memoize fetch!))
+
+(defn deps!
+  [package version]
+  (println package version)
+  (let [req (npm-package-version-request package version)
+        resp (memo-fetch! req)
+        body (resp :body)
+        info (json/read-str body)
+        deps (info "dependencies")]
+    (doseq [[k v] deps]
+      (deps! k (strip-constraint (get (str/split v #"\s+") 0))))))
+
 (comment
 
   (concat [1 2 3] (take 2 (repeat 0)))
@@ -82,12 +161,17 @@
   (conj [1 2 3] 0)
   (count [1 2 3])
 
-  (make-version "1.2.3")
-  (extend-version (make-version "1.2.3") 5)
-  (extend-version (make-version "1.2.3") 3)
-  (zip-versions (make-version "1") (make-version "1.2.3"))
-  (equal-versions? (make-version "1") (make-version "1.0.0"))
-  (equal-versions? (make-version "1") (make-version "1.0.1"))
+  (parse-version "1.2.3")
+  (extend-version (parse-version "1.2.3") 5)
+  (extend-version (parse-version "1.2.3") 3)
+  (zip-versions (parse-version "1") (parse-version "1.2.3"))
+  (equal-versions? (parse-version "1") (parse-version "1.0.0"))
+  (equal-versions? (parse-version "1") (parse-version "1.0.1"))
+
+  (make-term "tar" "7.4.3" :exact false)
+  (parse-term "tar 7.4.3")
+  (parse-term "tar ^7.4.3")
+  (parse-term "not tar ~7.4.3")
 
   (npm-registry-url)
   (npm-package-url "tar")
@@ -106,5 +190,7 @@
   (def info (json/read-str body))
   info
   (info "dependencies")
+
+  (deps! "tar" "7.4.3")
 
   :rcf)
