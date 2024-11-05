@@ -127,6 +127,11 @@
   [package]
   (format "%s/%s" (npm-registry-url) package))
 
+(defn npm-package-request
+  [package]
+  {:url (npm-package-url package)
+   :method :get})
+
 (defn npm-package-version-url
   [package version]
   (format "%s/%s/%s" (npm-registry-url) package version))
@@ -141,15 +146,24 @@
   (let [resp (hk-client/request req)]
     @resp))
 
-(def memo-fetch! (memoize fetch!))
+(def fetch-memo! (memoize fetch!))
+
+(defn fetch-npm-package!
+  [package]
+  (let [req (npm-package-request package)
+        resp (fetch-memo! req)]
+    (json/read-str (resp :body))))
+
+(defn fetch-npm-package-version!
+  [package version]
+  (let [req (npm-package-version-request package version)
+        resp (fetch-memo! req)]
+    (json/read-str (resp :body))))
 
 (defn deps!
   [package version]
   (println package version)
-  (let [req (npm-package-version-request package version)
-        resp (memo-fetch! req)
-        body (resp :body)
-        info (json/read-str body)
+  (let [info (fetch-npm-package-version! package version)
         deps (info "dependencies")]
     (doseq [[k v] deps]
       (deps! k (strip-constraint (get (str/split v #"\s+") 0))))))
@@ -175,22 +189,12 @@
 
   (npm-registry-url)
   (npm-package-url "tar")
+  (npm-package-request "tar")
   (npm-package-version-url "tar" "7.4.3")
   (npm-package-version-request "tar" "7.4.3")
 
-  (def req (npm-package-version-request "tar" "7.4.3"))
-  req
-
-  (def resp (fetch! req))
-  resp
-
-  (def body (resp :body))
-  body
-
-  (def info (json/read-str body))
-  info
-  (info "dependencies")
-
+  (fetch-npm-package! "tar")
+  (fetch-npm-package-version! "tar" "7.4.3")
   (deps! "tar" "7.4.3")
 
   :rcf)
