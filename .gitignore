@@ -2,6 +2,7 @@
 .clj-kondo/
 .lsp/
 .calva/
+.portal/
 
 # Default ignores
 pom.xml

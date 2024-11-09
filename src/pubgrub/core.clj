@@ -3,10 +3,6 @@
             [clojure.string :as str]
             [org.httpkit.client :as hk-client]))
 
-;;;; References:
-;;;; https://nex3.medium.com/pubgrub-2fb6470504f
-;;;; https://github.com/dart-lang/pub/blob/master/doc/solver.md
-
 ;;;; Let's start with semvers of any length (any number of segments separated by a period).
 ;;;; Ignore prereleases, release candiates, and things like that (for now). So, a version
 ;;;; could be something like "1.2" or "3.4.5". Once parsed, we can think of versions as a
@@ -26,7 +22,56 @@
 ;;;; In general, the algorithm deals with "incompatibilities": sets of terms that cannot
 ;;;; ALL be true. It builds a "derivation graph" (directed, acyclic, and binary) of these
 ;;;; incompatibilities. Through phases of "unit propagation", "conflict resolution", and
-;;;; "decision making", a solution is hopefully found (complete, partial, or none).
+;;;; "decision making", a solution is hopefully found (complete, partial, or none). The
+;;;; main algorithm is categorized as "Conflict-driven clause learning" which relates to
+;;;; boolean satisfiability.
+
+;;;; Example:
+;;;; tar 7.4.3 (https://registry.npmjs.org/tar/7.4.3)
+;;;;   @isaacs/fs-minipass ^4.0.0 (4.0.1)
+;;;;     minipass ^7.0.4 (7.1.2)
+;;;;   chownr ^3.0.0 (3.0.0)
+;;;;   minipass ^7.1.2 (7.1.2)
+;;;;   minizlib ^3.0.1 (3.0.1)
+;;;;     minipass ^7.0.4 (7.1.2)
+;;;;     rimraf ^5.0.5 (5.0.10, latest is 6.0.1)
+;;;;       glob ^10.3.7 (10.4.5, latest is 11.0.0)
+;;;;         minipass ^7.1.2 (7.1.2)
+;;;;         jackspeak ^3.1.2 (3.4.3, latest is 4.0.2)
+;;;;           @isaacs/cliui ^8.0.2 (8.0.2)
+;;;;             string-width ^5.1.2 (5.1.2, latest is 7.2.0)
+;;;;               strip-ansi ^7.0.1 (7.1.0)
+;;;;                 ansi-regex ^6.0.1 (6.1.0)
+;;;;               emoji-regex ^9.2.2 (9.2.2, latest is 10.4.0)
+;;;;               eastasianwidth ^0.2.0 (0.3.0)
+;;;;             strip-ansi ^7.0.1 (7.1.0)
+;;;;               ansi-regex ^6.0.1 (6.1.0)
+;;;;             wrap-ansi ^8.1.0 (8.1.0, latest is 9.0.0)
+;;;;               ansi-styles ^6.1.0 (6.2.1)
+;;;;               string-width ^5.0.1 (5.1.2, latest is 7.2.0)
+;;;;                 strip-ansi ^7.0.1 (7.1.0)
+;;;;                   ansi-regex ^6.0.1 (6.1.0)
+;;;;                 emoji-regex ^9.2.2 (9.2.2, latest is 10.4.0)
+;;;;                 eastasianwidth ^0.2.0 (0.3.0)
+;;;;               strip-ansi ^7.0.1 (7.1.0)
+;;;;                 ansi-regex ^6.0.1 (6.1.0)
+;;;;         minimatch ^9.0.4 (9.0.5, latest is 10.0.1)
+;;;;           brace-expansion ^2.0.1 (2.0.1, latest is 4.0.0)
+;;;;             balanced-match ^1.0.0 (1.0.2, latest is 3.0.1)
+;;;;         path-scurry ^1.11.1 (1.11.1, latest is 2.0.0)
+;;;;           minipass ^5.0.0 || ^6.0.2 || ^7.0.0 (7.1.2)
+;;;;           lru-cache ^10.2.0 (10.4.3, latest is 11.0.2)
+;;;;         foreground-child ^3.1.0 (3.3.0)
+;;;;           cross-spawn ^7.0.0 (7.0.5)
+;;;;             path-key ^3.1.0 (3.1.1, latest is 4.0.0)
+;;;;             shebang-command ^2.0.0 (2.0.0)
+;;;;               shebang-regex ^3.0.0 (3.0.0, latest is 4.0.0)
+;;;;             which ^2.0.1 (2.0.2, latest is 5.0.0)
+;;;;               isexe ^2.0.0 (2.0.0, latest is 3.1.1)
+;;;;           signal-exit ^4.0.1 (4.1.0)
+;;;;         package-json-from-dist ^1.0.0 (1.0.1)
+;;;;   mkdirp ^3.0.1 (3.0.1)
+;;;;   yallist ^5.0.0 (5.0.0)
 
 (defn parse-version
   "Parse a new version (sequence of integers)."
@@ -160,11 +205,19 @@
         resp (fetch-memo! req)]
     (json/read-str (resp :body))))
 
+(defn npm-package-latest
+  [package-info]
+  (get-in package-info ["dist-tags" "latest"]))
+
+(defn npm-package-version-dependencies
+  [package-version-info]
+  (get-in package-version-info ["dependencies"]))
+
 (defn deps!
   [package version]
   (println package version)
-  (let [info (fetch-npm-package-version! package version)
-        deps (info "dependencies")]
+  (let [package-version-info (fetch-npm-package-version! package version)
+        deps (npm-package-version-dependencies package-version-info)]
     (doseq [[k v] deps]
       (deps! k (strip-constraint (get (str/split v #"\s+") 0))))))
 
@@ -196,5 +249,8 @@
   (fetch-npm-package! "tar")
   (fetch-npm-package-version! "tar" "7.4.3")
   (deps! "tar" "7.4.3")
+
+  (npm-package-latest (fetch-npm-package! "@isaacs/fs-minipass"))
+  (npm-package-version-dependencies (fetch-npm-package-version! "tar" "7.4.3"))
 
   :rcf)
