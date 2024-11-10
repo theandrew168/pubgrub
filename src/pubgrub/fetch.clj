@@ -1,5 +1,7 @@
 (ns pubgrub.fetch
-  (:require [org.httpkit.client :as hk-client]))
+  (:require
+   [clojure.data.json :as json]
+   [org.httpkit.client :as hk-client]))
 
 (defn- fetch-sync!
   "Synchronously fetch a request and wait for a response."
@@ -10,3 +12,7 @@
 (def fetch!
   "Execute (and memoize) the fetch for a given request."
   (memoize fetch-sync!))
+
+(defn parse-body
+  [resp]
+  (json/read-str (resp :body)))

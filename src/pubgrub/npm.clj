@@ -1,8 +1,7 @@
 (ns pubgrub.npm
   (:require
    [pubgrub.fetch :as fetch]
-   [pubgrub.registry :as registry]
-   [clojure.data.json :as json]))
+   [pubgrub.registry :as registry]))
 
 (defn- registry-url
   []
@@ -34,23 +33,19 @@
   [package-version-body]
   (package-version-body "dependencies"))
 
-(defn- parse-body
-  [resp]
-  (json/read-str (resp :body)))
-
 (deftype NPMRegistry []
   registry/Registry
   (package-versions
     [_ package]
     (let [req (package-request package)
           resp (fetch/fetch! req)
-          body (parse-body resp)]
+          body (fetch/parse-body resp)]
       (package-versions body)))
   (package-version-dependencies
     [_ package version]
     (let [req (package-version-request package version)
           resp (fetch/fetch! req)
-          body (parse-body resp)]
+          body (fetch/parse-body resp)]
       (package-version-dependencies body))))
 
 (defn new-registry
