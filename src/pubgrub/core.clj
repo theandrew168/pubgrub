@@ -1,9 +1,7 @@
 (ns pubgrub.core
-  (:require
-   [clojure.string :as str]
-   [pubgrub.npm :as npm]
-   [pubgrub.registry :as registry]
-   [pubgrub.term :as term]))
+  (:require [pubgrub.npm :as npm]
+            [pubgrub.registry :as registry]
+            [pubgrub.term :as term]))
 
 ;;;; Let's start with semvers of any length (any number of segments separated by a period).
 ;;;; Ignore prereleases, release candiates, and things like that (for now). So, a version
@@ -75,13 +73,6 @@
 ;;;;   mkdirp ^3.0.1 (3.0.1)
 ;;;;   yallist ^5.0.0 (5.0.0)
 
-(defn deps!
-  [reg package version]
-  (println package version)
-  (let [deps (registry/package-version-dependencies reg package version)]
-    (doseq [[k v] deps]
-      (deps! reg k (term/strip-constraint (get (str/split v #"\s+") 0))))))
-
 (comment
 
   (concat [1 2 3] (take 2 (repeat 0)))
@@ -90,6 +81,5 @@
   (count [1 2 3])
 
   (def reg (npm/new-registry))
-  (deps! reg "tar" "7.4.3")
 
   :rcf)

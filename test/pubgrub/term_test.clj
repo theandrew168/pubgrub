@@ -2,13 +2,28 @@
   (:require [clojure.test :as t]
             [pubgrub.term :as term]))
 
-(t/deftest parse-term
-  (t/testing "parse-term"
+(t/deftest parse
+  (t/testing "term/parse"
     (t/is (= (term/parse "foo 1.2.3") {:package "foo"
-                                       :version [1 2 3]
+                                       :version "1.2.3"
                                        :constraint :exact
-                                       :negative? false}))
+                                       :positive? true}))
     (t/is (= (term/parse "not foo ^1.2.3") {:package "foo"
-                                            :version [1 2 3]
+                                            :version "1.2.3"
                                             :constraint :major
-                                            :negative? true}))))
+                                            :positive? false}))))
+
+(t/deftest includes?
+  (t/testing "term/includes?"
+    (t/is (term/includes? "foo 1.2.3" "1.2.3"))
+    (t/is (not (term/includes? "not foo 1.2.3" "1.2.3")))
+    (t/is (term/includes? "foo ^1.0.0" "1.2.3"))
+    (t/is (term/includes? "foo ^1.2.0" "1.2.3"))
+    (t/is (not (term/includes? "foo ^1.3.0" "1.2.3")))
+    (t/is (term/includes? "foo ~1.2.0" "1.2.3"))
+    (t/is (not (term/includes? "foo ~1.3.0" "1.2.3")))
+    (t/is (not (term/includes? "foo ~1.3.0" "0.2.3")))
+    (t/is (term/includes? "foo >=1.2.3" "1.2.3"))
+    (t/is (not (term/includes? "foo >1.2.3" "1.2.3")))
+    (t/is (term/includes? "foo <=1.2.3" "1.2.3"))
+    (t/is (not (term/includes? "foo <1.2.3" "1.2.3")))))
