@@ -27,28 +27,16 @@
   [t]
   (t :positive?))
 
-(defn- parse-constraint
+(defn- parse-raw-version
   [s]
   (cond
-    (str/starts-with? s "^") :major
-    (str/starts-with? s "~") :minor
-    (str/starts-with? s "<=") :lte
-    (str/starts-with? s ">=") :gte
-    (str/starts-with? s "<") :lt
-    (str/starts-with? s ">") :gt
-    :else :exact))
-
-(defn- strip-constraint
-  [s]
-  (let [constraint (parse-constraint s)]
-    (case constraint
-      :major (subs s 1)
-      :minor (subs s 1)
-      :lte (subs s 2)
-      :gte (subs s 2)
-      :lt (subs s 1)
-      :gt (subs s 1)
-      :exact s)))
+    (str/starts-with? s "^") [:major (subs s 1)]
+    (str/starts-with? s "~") [:minor (subs s 1)]
+    (str/starts-with? s "<=") [:lte (subs s 2)]
+    (str/starts-with? s ">=") [:gte (subs s 2)]
+    (str/starts-with? s "<") [:lt (subs s 1)]
+    (str/starts-with? s ">") [:gt (subs s 1)]
+    :else [:exact s]))
 
 (defn parse
   [s]
@@ -57,8 +45,7 @@
         positive? (< length 3)
         package (if positive? (get fields 0) (get fields 1))
         raw-version (if positive? (get fields 1) (get fields 2))
-        constraint (parse-constraint raw-version)
-        version (strip-constraint raw-version)]
+        [constraint version] (parse-raw-version raw-version)]
     (make package version constraint positive?)))
 
 (defn- includes-version?
