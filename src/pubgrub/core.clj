@@ -1,7 +1,5 @@
 (ns pubgrub.core
-  (:require [pubgrub.npm :as npm]
-            [pubgrub.registry :as registry]
-            [pubgrub.term :as term]))
+  (:require [pubgrub.npm :as npm]))
 
 ;;;; Let's start with semvers of any length (any number of segments separated by a period).
 ;;;; Ignore prereleases, release candiates, and things like that (for now). So, a version

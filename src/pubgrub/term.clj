@@ -3,76 +3,60 @@
    [clojure.string :as str]
    [pubgrub.version :as version]))
 
+;; TODO: Should I write Normand-style getters and setters
+;; for these fields?
 (defn- make
-  [package version constraint positive?]
+  [package ranges positive?]
   {:package package
-   :version version
-   ; :exact :major :minor :lt :lte :gt :gte
-   :constraint constraint
+   :ranges ranges
    :positive? positive?})
 
-(defn- get-package
-  [t]
-  (t :package))
-
-(defn- get-version
-  [t]
-  (t :version))
-
-(defn- get-constraint
-  [t]
-  (t :constraint))
-
-(defn- get-positive?
-  [t]
-  (t :positive?))
-
-(defn- parse-raw-version
+;; Constraints can be one of:
+;; :exact :major :minor :lt :lte :gt :gte
+(defn- parse-range
   [s]
   (cond
-    (str/starts-with? s "^") [:major (subs s 1)]
-    (str/starts-with? s "~") [:minor (subs s 1)]
-    (str/starts-with? s "<=") [:lte (subs s 2)]
-    (str/starts-with? s ">=") [:gte (subs s 2)]
-    (str/starts-with? s "<") [:lt (subs s 1)]
-    (str/starts-with? s ">") [:gt (subs s 1)]
-    :else [:exact s]))
+    (str/starts-with? s "^") {:constraint :major :version (subs s 1)}
+    (str/starts-with? s "~") {:constraint :minor :version (subs s 1)}
+    (str/starts-with? s "<=") {:constraint :lte :version (subs s 2)}
+    (str/starts-with? s ">=") {:constraint :gte :version (subs s 2)}
+    (str/starts-with? s "<") {:constraint :lt :version (subs s 1)}
+    (str/starts-with? s ">") {:constraint :gt :version (subs s 1)}
+    :else {:constraint :exact :version s}))
+
+(defn- split
+  "Split a term on whitespace or pipe (for logical OR)."
+  [s]
+  (str/split s #"[\s|]+"))
 
 (defn parse
   [s]
-  (let [fields (str/split s #"\s+")
-        length (count fields)
-        positive? (< length 3)
-        package (if positive? (get fields 0) (get fields 1))
-        raw-version (if positive? (get fields 1) (get fields 2))
-        [constraint version] (parse-raw-version raw-version)]
-    (make package version constraint positive?)))
+  (let [fields (split s)
+        package (first fields)
+        ranges (map parse-range (rest fields))]
+    (make package ranges true)))
 
-(defn- includes-version?
-  [tc tv v]
-  (case tc
-    :major (and (version/greater-than-or-equal? v tv)
-                (= (get v 0) (get tv 0)))
-    :minor (and (version/greater-than-or-equal? v tv)
-                (= (get v 0) (get tv 0))
-                (= (get v 1) (get tv 1)))
-    :lte (version/less-than-or-equal? v tv)
-    :gte (version/greater-than-or-equal? v tv)
-    :lt (version/less-than? v tv)
-    :gt (version/greater-than? v tv)
-    :exact (version/equal? v tv)))
+(defn- range-includes-version?
+  [r v]
+  (let [rc (r :constraint)
+        rv (r :version)]
+    (case rc
+      :major (and (version/greater-than-or-equal? v rv)
+                  (= (get v 0) (get rv 0)))
+      :minor (and (version/greater-than-or-equal? v rv)
+                  (= (get v 0) (get rv 0))
+                  (= (get v 1) (get rv 1)))
+      :lte (version/less-than-or-equal? v rv)
+      :gte (version/greater-than-or-equal? v rv)
+      :lt (version/less-than? v rv)
+      :gt (version/greater-than? v rv)
+      :exact (version/equal? v rv))))
+
 
 (defn includes?
   "Check if a term includes a specific version."
   [t v]
-  (let [t (parse t)
-        tc (get-constraint t)
-        tv (get-version t)
-        tpos? (get-positive? t)
-        inc? (includes-version? tc tv v)]
-    (if tpos?
-      inc?
-      (not inc?))))
+  (some #(range-includes-version? % v) ((parse t) :ranges)))
 
 ;; This is a set operation since it works on ranges, not specific versions.
 (defn satisfies?
@@ -92,6 +76,7 @@
 (comment
 
   (parse "foo ^1.2.3")
+  (parse "minipass ^5.0.0 || ^6.0.2 || ^7.0.0")
   (includes? "foo 1.2.3" "1.2.3")
   (includes? "foo 1.2.3" "1.2.0")
   (includes? "foo ^1.2.3" "1.3.3")
