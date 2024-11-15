@@ -27,25 +27,108 @@
 ;;;; main algorithm is categorized as "Conflict-driven clause learning" which relates to
 ;;;; boolean satisfiability.
 
-;; TODO: Create helper for making incompats (set of terms w/ parents?).
 ;; TODO: Create func for generating the initial set of incompats.
 ;; TODO: Find a better way of details with separate package/version and term parsing.
+
+(defn- choose-next-package
+  "Decide which package to choose next: the one with the fewest versions."
+  [reg]
+  "TODO")
+
+(defn- choose-next-package-version
+  "Decide which package version to choose next: the highest compatible version."
+  [reg package]
+  "TODO")
+
+(defn- make-incompatibility
+  [terms parents]
+  {:terms (set terms)
+   :parents parents})
+
+(defn- incompatibility-terms
+  [i]
+  (i :terms))
+
+(defn- incompatibility-parents
+  [i]
+  (i :parents))
+
+(defn- make-assignment
+  [term category cause level]
+  {:term term
+   :category category
+   :cause cause
+   :level level})
+
+(defn- assignment-term
+  [a]
+  (a :term))
+
+(defn- assignment-category
+  [a]
+  (a :category))
+
+(defn- assignment-cause
+  [a]
+  (a :cause))
+
+(defn- assignment-level
+  [a]
+  (a :level))
 
 (defn- add-dep
   "Given a package and a dependency, add both terms to an incompat with the dep negated."
   [package version dep range]
-  #{(term/parse (format "%s %s" package version))
-    (assoc (term/parse (format "%s %s" dep range)) :positive? false)})
+  (make-incompatibility
+   [(term/parse (format "%s %s" package version))
+    (assoc (term/parse (format "%s %s" dep range)) :positive? false)]
+   []))
+
+(defn- unit-propagation
+  [solution incompatibilities next]
+  (let [changed #{next}]
+    ;; While "changed" isn't empty
+    (while (count changed)
+      ;; Remove an element from "changed", call it "package"
+      (let [package (first changed)
+            changed (disj changed package)]
+        ;; Find all incompats that refer to package (newest to oldest)
+        ;; For each incompat:
+        ;;   If it is satisfied by the current partial solution
+        ;;     Run conflict resolution
+        ;;   If it is almost satisfied (all but one) by the current partial solution
+        ;;     Add the incompat's unsat term to the solution (negated) w/ incompat as cause
+        ;;     Add term's name to changed
+        )))
+  "TODO")
+
+(defn- conflict-resolution
+  [solution incompatibilities]
+  "TODO")
+
+(defn- decision-making
+  [reg solution incompatibilities next]
+  ;; Pick a package where:
+  ;; 1. The partial solution contains a positive derivation for that package. 
+  ;; 2. The partial solution doesn't contain a decision for that package. 
+  ;; 3. The package version matches all assignments in the partial solution.
+  ;; From these, choose the latest matching version of the package with
+  ;; the fewest total version (this is what pub does).
+  ;; Then, add the package's deps to the list of incompats.
+  ;; Optimization: collapse same deps from adjacent package versions 
+  "TODO")
 
 ;; https://github.com/dart-lang/pub/blob/master/doc/solver.md#the-algorithm
 (defn solve
   "Do the pubgrub thing!"
   [reg package version]
-  (let [solution {package version}
-        deps (registry/package-version-dependencies reg package version)
-        ;; derive top-level incompats
-        ;;   for each dep, add "{root v, not dep v}"
-        incompatibilities (set (map #(add-dep package version % (deps %)) (keys deps)))]
+  (let [solution []
+        incompatibilities [(make-incompatibility [(term/negate (term/parse (format "%s %s" package version)))] [])]
+        next package]
+    (unit-propagation solution incompatibilities next)
+    (decision-making reg solution incompatibilities next)
+    ;; derive top-level incompats
+    ;;   for each dep, add "{root v, not dep v}"
     ;; unit propagation
     ;;   if conflict, try to resolve
     ;;   if resolution fails, solving has failed (report error)
@@ -53,7 +136,8 @@
     ;;   if no more work to do, solved!
     ;; repeat til solved or conflict
     {:solution solution
-     :incompatibilities incompatibilities}))
+     :incompatibilities incompatibilities
+     :next next}))
 
 (comment
 
@@ -61,6 +145,9 @@
   (take 4 (repeat 0))
   (conj [1 2 3] 0)
   (count [1 2 3])
+
+  (first #{1 2 3})
+  (disj #{1 2 3} 1)
 
   ;; https://github.com/dart-lang/pub/blob/master/doc/solver.md#no-conflicts
   (def example1

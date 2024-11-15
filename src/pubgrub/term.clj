@@ -11,6 +11,10 @@
    :ranges ranges
    :positive? positive?})
 
+(defn negate
+  [t]
+  (assoc t :positive? false))
+
 ;; Constraints can be one of:
 ;; :exact :major :minor :lt :lte :gt :gte
 (defn- parse-range
