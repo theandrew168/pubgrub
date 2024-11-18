@@ -18,6 +18,9 @@ class Version:
 			b += [0] * (n - len(b))
 		return a, b
 	
+	def __getitem__(self, key):
+		return self.fields[key]
+	
 	def __eq__(self, other):
 		a = copy.deepcopy(self.fields)
 		b = copy.deepcopy(other.fields)
@@ -101,6 +104,32 @@ class Range:
 			return '>' + str(self.version)
 		else:
 			return str(self.version)
+	
+	def __contains__(self, item):
+		version = Version(item)
+		if self.constraint == 'major':
+			clauses = [
+				version >= self.version,
+				version[0] == self.version[0],
+			]
+			return all(clauses)
+		elif self.constraint == 'minor':
+			clauses = [
+				version >= self.version,
+				version[0] == self.version[0],
+				version[1] == self.version[1],
+			]
+			return all(clauses)
+		elif self.constraint == 'le':
+			return version <= self.version
+		elif self.constraint == 'ge':
+			return version >= self.version
+		elif self.constraint == 'lt':
+			return version < self.version
+		elif self.constraint == 'gt':
+			return version > self.version
+		else:
+			return version == self.version
 
 
 class Term:
@@ -121,26 +150,64 @@ class Term:
 		return term
 
 
+class Registry:
+	def __init__(self, packages):
+		self.packages = packages
+
+	def package_versions(self, package):
+		return self.packages[package].keys()
+
+	def package_version_dependencies(self, package, version):
+		return self.packages[package][version]
+
+
 if __name__ == '__main__':
-	v1 = Version('1.0.0')
-	print(v1)
-	v2 = Version('1.0')
-	print(v2)
-	v3 = Version('1.0.1')
+	packages = {
+		'root': {
+			'1.0.0': {
+				'foo': '^1.0.0',
+			},
+		},
+		'foo': {
+			'1.0.0': {
+				'bar': '^1.0.0',
+			},
+		},
+		'bar': {
+			'1.0.0': {},
+			'2.0.0': {},
+		},
+	}
+	registry = Registry(packages)
+	print(registry.package_versions('root'))
+	print(registry.package_version_dependencies('root', '1.0.0'))
 
-	print('v1 == v2', v1 == v2)
-	print('v1 <= v2', v1 <= v2)
-	print('v1 >= v2', v1 >= v2)
-	print('v1 < v2', v1 < v2)
-	print('v1 > v2', v1 > v2)
 
-	print('v1 == v3', v1 == v3)
-	print('v1 <= v3', v1 <= v3)
-	print('v1 >= v3', v1 >= v3)
-	print('v1 < v3', v1 < v3)
-	print('v1 > v3', v1 > v3)
+# if __name__ == '__main__':
+# 	v1 = Version('1.0.0')
+# 	print(v1)
+# 	v2 = Version('1.0')
+# 	print(v2)
+# 	v3 = Version('1.0.1')
 
-	t = Term('root 1.0.0')
-	print(t)
-	t = Term('not foo ^1.0.0 || ^2.0.0')
-	print(t)
+# 	print('v1 == v2', v1 == v2)
+# 	print('v1 <= v2', v1 <= v2)
+# 	print('v1 >= v2', v1 >= v2)
+# 	print('v1 < v2', v1 < v2)
+# 	print('v1 > v2', v1 > v2)
+
+# 	print('v1 == v3', v1 == v3)
+# 	print('v1 <= v3', v1 <= v3)
+# 	print('v1 >= v3', v1 >= v3)
+# 	print('v1 < v3', v1 < v3)
+# 	print('v1 > v3', v1 > v3)
+
+# 	r1 = Range('^1.0.0')
+# 	print('1.0.0 in ^1.0.0', '1.0.0' in r1)
+# 	print('2.0.0 in ^1.0.0', '2.0.0' in r1)
+# 	print('1.5.0 in ^1.0.0', '1.5.0' in r1)
+
+# 	t = Term('root 1.0.0')
+# 	print(t)
+# 	t = Term('not foo ^1.0.0 || ^2.0.0')
+# 	print(t)
