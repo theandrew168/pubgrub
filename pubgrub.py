@@ -5,10 +5,10 @@ import re
 class Version:
 	def __init__(self, version):
 		self.fields = [int(s) for s in version.split('.')]
-	
+
 	def __str__(self):
 		return '.'.join(str(f) for f in self.fields)
-	
+
 	@staticmethod
 	def extend(a, b):
 		n = max(len(a), len(b))
@@ -17,10 +17,10 @@ class Version:
 		if len(b) < n:
 			b += [0] * (n - len(b))
 		return a, b
-	
+
 	def __getitem__(self, key):
 		return self.fields[key]
-	
+
 	def __eq__(self, other):
 		a = copy.deepcopy(self.fields)
 		b = copy.deepcopy(other.fields)
@@ -37,7 +37,7 @@ class Version:
 			if aa > bb:
 				return False
 		return False
-	
+
 	def __le__(self, other):
 		a = copy.deepcopy(self.fields)
 		b = copy.deepcopy(other.fields)
@@ -88,7 +88,7 @@ class Range:
 			self.constraint, self.version  = 'gt', Version(range[1:])
 		else:
 			self.constraint, self.version  = 'exact', Version(range)
-	
+
 	def __str__(self):
 		if self.constraint == 'major':
 			return '^' + str(self.version)
@@ -104,7 +104,7 @@ class Range:
 			return '>' + str(self.version)
 		else:
 			return str(self.version)
-	
+
 	def __contains__(self, version):
 		version = Version(version)
 		if self.constraint == 'major':
@@ -143,14 +143,22 @@ class Term:
 		else:
 			self.package, self.ranges = fields[0], [Range(range) for range in fields[1:]]
 
+	@classmethod
+	def from_package_and_version(cls, package, version):
+		return cls('{} {}'.format(package, version))
+
 	def __str__(self):
 		term = '{} {}'.format(self.package, ' || '.join(str(range) for range in self.ranges))
 		if not self.is_positive:
 			term = 'not ' + term
 		return term
-	
+
 	def __contains__(self, version):
 		return any(version in range for range in self.ranges)
+
+	def negate(self):
+		self.is_positive = False
+		return self
 
 
 class Incompatibility:
@@ -161,14 +169,20 @@ class Incompatibility:
 	def __str__(self):
 		return '{' + ', '.join(str(term) for term in self.terms) + '}'
 
-	def satisfies(self, term):
-		pass
+	def __contains__(self, package):
+		return any(package == term.package for term in self.terms)
 
-	def contradicts(self, term):
-		pass
+	def unsatisfied_terms(self, version):
+		return [term for term in self.terms if version not in term]
 
-	def inconclusive(self, term):
-		return not self.satisfies(term) and not self.contradicts(self, term)
+	def satisfies(self, version):
+		return all(version in term for term in self.terms)
+
+	def contradicts(self, version):
+		return all(version not in term for term in self.terms)
+
+	def inconclusive(self, version):
+		return not self.satisfies(version) and not self.contradicts(self, version)
 
 
 class Registry:
@@ -183,6 +197,28 @@ class Registry:
 
 
 def solve(registry, package, version):
+	root = Term.from_package_and_version(package, version)
+	solution = []
+	incompats = [root.negate()]
+	next = package
+	while True:
+		unit_propagation(solution, incompats, next)
+		next = decision_making(registry, solution, incompats, next)
+		break
+
+
+def unit_propagation(solution, incompats, next):
+	pass
+	# changed = {next}
+	# while changed:
+	# 	package = changed.pop()
+	# 	references = [incompat for incompat in incompats if package in incompat]
+	# 	references = reversed(references)
+	# 	for incompat in references:
+	# 		if incompat.satisfies()
+
+
+def decision_making(registry, solution, incompats, next):
 	pass
 
 
