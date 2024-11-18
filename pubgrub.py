@@ -105,8 +105,8 @@ class Range:
 		else:
 			return str(self.version)
 	
-	def __contains__(self, item):
-		version = Version(item)
+	def __contains__(self, version):
+		version = Version(version)
 		if self.constraint == 'major':
 			clauses = [
 				version >= self.version,
@@ -148,6 +148,27 @@ class Term:
 		if not self.is_positive:
 			term = 'not ' + term
 		return term
+	
+	def __contains__(self, version):
+		return any(version in range for range in self.ranges)
+
+
+class Incompatibility:
+	def __init__(self, terms):
+		self.terms = [Term(term) for term in terms]
+		self.parents = []
+
+	def __str__(self):
+		return '{' + ', '.join(str(term) for term in self.terms) + '}'
+
+	def satisfies(self, term):
+		pass
+
+	def contradicts(self, term):
+		pass
+
+	def inconclusive(self, term):
+		return not self.satisfies(term) and not self.contradicts(self, term)
 
 
 class Registry:
@@ -159,6 +180,10 @@ class Registry:
 
 	def package_version_dependencies(self, package, version):
 		return self.packages[package][version]
+
+
+def solve(registry, package, version):
+	pass
 
 
 if __name__ == '__main__':
@@ -207,7 +232,13 @@ if __name__ == '__main__':
 # 	print('2.0.0 in ^1.0.0', '2.0.0' in r1)
 # 	print('1.5.0 in ^1.0.0', '1.5.0' in r1)
 
-# 	t = Term('root 1.0.0')
-# 	print(t)
-# 	t = Term('not foo ^1.0.0 || ^2.0.0')
-# 	print(t)
+# 	t1 = Term('root 1.0.0')
+# 	print(t1)
+# 	t2 = Term('foo ^1.0.0 || ^2.0.0')
+# 	print(t2)
+# 	print('1.0.0 in ^1.0.0 || ^2.0.0', '1.0.0' in t2)
+# 	print('2.0.0 in ^1.0.0 || ^2.0.0', '2.0.0' in t2)
+# 	print('3.0.0 in ^1.0.0 || ^2.0.0', '3.0.0' in t2)
+
+# 	i1 = Incompatibility(['root 1.0.0', 'not foo ^1.0.0'])
+# 	print(i1)
