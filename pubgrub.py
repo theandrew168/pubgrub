@@ -175,6 +175,7 @@ class Incompatibility:
 	def unsatisfied_terms(self, version):
 		return [term for term in self.terms if version not in term]
 
+	# TODO: This should work for other terms (including ranges)
 	def satisfies(self, version):
 		return all(version in term for term in self.terms)
 
@@ -183,6 +184,18 @@ class Incompatibility:
 
 	def inconclusive(self, version):
 		return not self.satisfies(version) and not self.contradicts(self, version)
+
+
+class Assignment:
+	def __init__(self, term, category):
+		self.term = Term(term)
+		self.category = category
+		self.cause = None
+		self.level = 0
+
+	def __str__(self):
+		category = 'DECISION' if self.category == 'decision' else 'DERIVATION'
+		return '{} - {}'.format(category, str(self.term))
 
 
 class Registry:
@@ -222,59 +235,62 @@ def decision_making(registry, solution, incompats, next):
 	pass
 
 
-if __name__ == '__main__':
-	packages = {
-		'root': {
-			'1.0.0': {
-				'foo': '^1.0.0',
-			},
-		},
-		'foo': {
-			'1.0.0': {
-				'bar': '^1.0.0',
-			},
-		},
-		'bar': {
-			'1.0.0': {},
-			'2.0.0': {},
-		},
-	}
-	registry = Registry(packages)
-	print(registry.package_versions('root'))
-	print(registry.package_version_dependencies('root', '1.0.0'))
-
-
 # if __name__ == '__main__':
-# 	v1 = Version('1.0.0')
-# 	print(v1)
-# 	v2 = Version('1.0')
-# 	print(v2)
-# 	v3 = Version('1.0.1')
+# 	packages = {
+# 		'root': {
+# 			'1.0.0': {
+# 				'foo': '^1.0.0',
+# 			},
+# 		},
+# 		'foo': {
+# 			'1.0.0': {
+# 				'bar': '^1.0.0',
+# 			},
+# 		},
+# 		'bar': {
+# 			'1.0.0': {},
+# 			'2.0.0': {},
+# 		},
+# 	}
+# 	registry = Registry(packages)
+# 	print(registry.package_versions('root'))
+# 	print(registry.package_version_dependencies('root', '1.0.0'))
 
-# 	print('v1 == v2', v1 == v2)
-# 	print('v1 <= v2', v1 <= v2)
-# 	print('v1 >= v2', v1 >= v2)
-# 	print('v1 < v2', v1 < v2)
-# 	print('v1 > v2', v1 > v2)
 
-# 	print('v1 == v3', v1 == v3)
-# 	print('v1 <= v3', v1 <= v3)
-# 	print('v1 >= v3', v1 >= v3)
-# 	print('v1 < v3', v1 < v3)
-# 	print('v1 > v3', v1 > v3)
+if __name__ == '__main__':
+	v1 = Version('1.0.0')
+	print(v1)
+	v2 = Version('1.0')
+	print(v2)
+	v3 = Version('1.0.1')
 
-# 	r1 = Range('^1.0.0')
-# 	print('1.0.0 in ^1.0.0', '1.0.0' in r1)
-# 	print('2.0.0 in ^1.0.0', '2.0.0' in r1)
-# 	print('1.5.0 in ^1.0.0', '1.5.0' in r1)
+	print('v1 == v2', v1 == v2)
+	print('v1 <= v2', v1 <= v2)
+	print('v1 >= v2', v1 >= v2)
+	print('v1 < v2', v1 < v2)
+	print('v1 > v2', v1 > v2)
 
-# 	t1 = Term('root 1.0.0')
-# 	print(t1)
-# 	t2 = Term('foo ^1.0.0 || ^2.0.0')
-# 	print(t2)
-# 	print('1.0.0 in ^1.0.0 || ^2.0.0', '1.0.0' in t2)
-# 	print('2.0.0 in ^1.0.0 || ^2.0.0', '2.0.0' in t2)
-# 	print('3.0.0 in ^1.0.0 || ^2.0.0', '3.0.0' in t2)
+	print('v1 == v3', v1 == v3)
+	print('v1 <= v3', v1 <= v3)
+	print('v1 >= v3', v1 >= v3)
+	print('v1 < v3', v1 < v3)
+	print('v1 > v3', v1 > v3)
 
-# 	i1 = Incompatibility(['root 1.0.0', 'not foo ^1.0.0'])
-# 	print(i1)
+	r1 = Range('^1.0.0')
+	print('1.0.0 in ^1.0.0', '1.0.0' in r1)
+	print('2.0.0 in ^1.0.0', '2.0.0' in r1)
+	print('1.5.0 in ^1.0.0', '1.5.0' in r1)
+
+	t1 = Term('root 1.0.0')
+	print(t1)
+	t2 = Term('foo ^1.0.0 || ^2.0.0')
+	print(t2)
+	print('1.0.0 in ^1.0.0 || ^2.0.0', '1.0.0' in t2)
+	print('2.0.0 in ^1.0.0 || ^2.0.0', '2.0.0' in t2)
+	print('3.0.0 in ^1.0.0 || ^2.0.0', '3.0.0' in t2)
+
+	i1 = Incompatibility(['root 1.0.0', 'not foo ^1.0.0'])
+	print(i1)
+
+	a1 = Assignment('root 1.0.0', 'decision')
+	print(a1)
