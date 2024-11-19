@@ -1,4 +1,5 @@
 import copy
+import enum
 import re
 
 
@@ -72,66 +73,94 @@ class Version:
 		return True
 
 
+class Constraint(enum.Enum):
+	MAJOR = enum.auto()
+	MINOR = enum.auto()
+	LESS_THAN_OR_EQUAL = enum.auto()
+	GREATER_THAN_OR_EQUAL = enum.auto()
+	LESS_THAN = enum.auto()
+	GREATER_THAN = enum.auto()
+	EXACT = enum.auto()
+
+
 class Range:
 	def __init__(self, range):
 		if range.startswith('^'):
-			self.constraint, self.version = 'major', Version(range[1:])
+			self.constraint, self.version = Constraint.MAJOR, Version(range[1:])
 		elif range.startswith('~'):
-			self.constraint, self.version  = 'minor', Version(range[1:])
+			self.constraint, self.version = Constraint.MINOR, Version(range[1:])
 		elif range.startswith('<='):
-			self.constraint, self.version  = 'le', Version(range[2:])
+			self.constraint, self.version = Constraint.LESS_THAN_OR_EQUAL, Version(range[2:])
 		elif range.startswith('>='):
-			self.constraint, self.version  = 'ge', Version(range[2:])
+			self.constraint, self.version = Constraint.GREATER_THAN_OR_EQUAL, Version(range[2:])
 		elif range.startswith('<'):
-			self.constraint, self.version  = 'lt', Version(range[1:])
+			self.constraint, self.version = Constraint.LESS_THAN, Version(range[1:])
 		elif range.startswith('>'):
-			self.constraint, self.version  = 'gt', Version(range[1:])
+			self.constraint, self.version = Constraint.GREATER_THAN, Version(range[1:])
 		else:
-			self.constraint, self.version  = 'exact', Version(range)
+			self.constraint, self.version = Constraint.EXACT, Version(range)
 
 	def __str__(self):
-		if self.constraint == 'major':
+		if self.constraint == Constraint.MAJOR:
 			return '^' + str(self.version)
-		elif self.constraint == 'minor':
+		elif self.constraint == Constraint.MINOR:
 			return '~' + str(self.version)
-		elif self.constraint == 'le':
+		elif self.constraint == Constraint.LESS_THAN_OR_EQUAL:
 			return '<=' + str(self.version)
-		elif self.constraint == 'ge':
+		elif self.constraint == Constraint.GREATER_THAN_OR_EQUAL:
 			return '>=' + str(self.version)
-		elif self.constraint == 'lt':
+		elif self.constraint == Constraint.LESS_THAN:
 			return '<' + str(self.version)
-		elif self.constraint == 'gt':
+		elif self.constraint == Constraint.GREATER_THAN:
 			return '>' + str(self.version)
 		else:
 			return str(self.version)
 
 	def __contains__(self, version):
 		version = Version(version)
-		if self.constraint == 'major':
+		if self.constraint == Constraint.MAJOR:
 			clauses = [
 				version >= self.version,
 				version[0] == self.version[0],
 			]
 			return all(clauses)
-		elif self.constraint == 'minor':
+		elif self.constraint == Constraint.MINOR:
 			clauses = [
 				version >= self.version,
 				version[0] == self.version[0],
 				version[1] == self.version[1],
 			]
 			return all(clauses)
-		elif self.constraint == 'le':
+		elif self.constraint == Constraint.LESS_THAN_OR_EQUAL:
 			return version <= self.version
-		elif self.constraint == 'ge':
+		elif self.constraint == Constraint.GREATER_THAN_OR_EQUAL:
 			return version >= self.version
-		elif self.constraint == 'lt':
+		elif self.constraint == Constraint.LESS_THAN:
 			return version < self.version
-		elif self.constraint == 'gt':
+		elif self.constraint == Constraint.GREATER_THAN:
 			return version > self.version
 		else:
 			return version == self.version
 
 
+class Relation(enum.Enum):
+	DISJOINT = enum.auto()
+	SUBSET = enum.auto()
+	OVERLAPPING = enum.auto()
+
+
+# satisfies    -> subset
+# satisfied by -> includes
+#
+# Term operations:
+# 1. Relation between terms (disjoint, subset, overlapping)
+#    - https://github.com/dart-lang/pub/blob/85aeff4c2f28ce55ac5cbf7be251c009e3829e30/lib/src/solver/term.dart#L45
+# 2. Intersection of two terms
+#    - https://github.com/dart-lang/pub/blob/85aeff4c2f28ce55ac5cbf7be251c009e3829e30/lib/src/solver/term.dart#L118
+# 3. Difference of two terms
+#    - https://github.com/dart-lang/pub/blob/85aeff4c2f28ce55ac5cbf7be251c009e3829e30/lib/src/solver/term.dart#L161
+# 4. Allows any
+# 5. Allows all
 class Term:
 	def __init__(self, term):
 		fields = re.split(r'[\s|]+', term)
@@ -153,12 +182,28 @@ class Term:
 			term = 'not ' + term
 		return term
 
-	def __contains__(self, version):
-		return any(version in range for range in self.ranges)
-
 	def negate(self):
 		self.is_positive = False
 		return self
+
+	def allows_all(self, other):
+		pass
+
+	def allows_any(self, other):
+		pass
+
+	def relation(self, other):
+		pass
+
+	def intersection(self, other):
+		pass
+
+	def difference(self, other):
+		pass
+
+	# True if this is a subset of other.
+	def satisfies(self, other):
+		return self.package == other.package and self.relation(other) == Relation.SUBSET
 
 
 class Incompatibility:
@@ -169,6 +214,7 @@ class Incompatibility:
 	def __str__(self):
 		return '{' + ', '.join(str(term) for term in self.terms) + '}'
 
+	# True if this incompatibility refers to a given package.
 	def __contains__(self, package):
 		return any(package == term.package for term in self.terms)
 
@@ -176,6 +222,7 @@ class Incompatibility:
 		return [term for term in self.terms if version not in term]
 
 	# TODO: This should work for other terms (including ranges)
+	# We say that a set of terms S satisfies an incompatibility I if S satisfies every term in I.
 	def satisfies(self, version):
 		return all(version in term for term in self.terms)
 
@@ -186,16 +233,44 @@ class Incompatibility:
 		return not self.satisfies(version) and not self.contradicts(self, version)
 
 
+class Category(enum.Enum):
+	DECISION = enum.auto()
+	DERIVATION = enum.auto()
+
+
 class Assignment:
 	def __init__(self, term, category):
 		self.term = Term(term)
 		self.category = category
+		# cause is an incompat
 		self.cause = None
 		self.level = 0
 
 	def __str__(self):
-		category = 'DECISION' if self.category == 'decision' else 'DERIVATION'
+		category = 'DECISION' if self.category == Category.DECISION else 'DERIVATION'
 		return '{} - {}'.format(category, str(self.term))
+
+
+class PartialSolution:
+	def __init__(self):
+		self.solution = []
+
+	def add_decision(self, term):
+		assignment = Assignment(term, Category.DECISION)
+		self.solution.append(assignment)
+
+	def add_derivation(self, term):
+		assignment = Assignment(term, Category.DERIVATION)
+		self.solution.append(assignment)
+
+	def relation(self, term):
+		pass
+
+	# If a partial solution has, for every positive derivation,
+	# a corresponding decision that satisfies that assignment,
+	# it's a total solution and version solving has succeeded.
+	def is_solved(self):
+		pass
 
 
 class Registry:
@@ -209,30 +284,47 @@ class Registry:
 		return self.packages[package][version]
 
 
-def solve(registry, package, version):
-	root = Term.from_package_and_version(package, version)
-	solution = []
-	incompats = [root.negate()]
-	next = package
-	while True:
-		unit_propagation(solution, incompats, next)
-		next = decision_making(registry, solution, incompats, next)
-		break
+class Solver:
+	def __init__(self, registry):
+		self.registry = registry
+		self.solution = PartialSolution()
+		self.incompatibilities = []
 
+	def solve(self, package, version):
+		root = Term.from_package_and_version(package, version)
+		self.incompatibilities.append(root.negate())
 
-def unit_propagation(solution, incompats, next):
-	pass
-	# changed = {next}
-	# while changed:
-	# 	package = changed.pop()
-	# 	references = [incompat for incompat in incompats if package in incompat]
-	# 	references = reversed(references)
-	# 	for incompat in references:
-	# 		if incompat.satisfies()
+		next = package
+		while True:
+			self._unit_propagation(next)
+			next = self._decision_making(next)
+			break
 
+	def _unit_propagation(self, next):
+		changed = {next}
+		while changed:
+			package = changed.pop()
+			incompatibilities = [incompatibility for incompatibility in self.incompatibilities if package in incompatibility]
+			incompatibilities = reversed(incompatibilities)
+			for incompatibility in incompatibilities:
+				unsatisfied = None
+				for term in incompatibility.terms:
+					relation = self.solution.relation(incompatibility)
+					if relation == Relation.DISJOINT:
+						break
+					elif relation == Relation.OVERLAPPING:
+						if unsatisfied is not None:
+							break
+						unsatisfied = term
 
-def decision_making(registry, solution, incompats, next):
-	pass
+				if unsatisfied is None:
+					raise Exception('conflict resolution')
+
+				self.solution.add_derivation(unsatisfied)
+				changed.add(unsatisfied.package)
+
+	def _decision_making(next):
+		pass
 
 
 # if __name__ == '__main__':
