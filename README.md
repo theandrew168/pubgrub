@@ -1,17 +1,17 @@
-# pubgrub-clj
+# pubgrub
 
-Exploring the PubGrub version solving algorithm in Clojure
+Exploring the PubGrub version solving algorithm
 
 ## Setup
 
-This project depends on the [Clojure](https://clojure.org/) programming language.
+This project depends on the [Python](https://www.python.org/) programming language.
 
 ## Testing
 
 Tests can be run via:
 
 ```
-clj -X:test
+python3 test_pubgrub.py
 ```
 
 ## References
