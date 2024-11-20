@@ -1,6 +1,6 @@
 # pubgrub
 
-Exploring the PubGrub version solving algorithm
+Exploring the [PubGrub](https://nex3.medium.com/pubgrub-2fb6470504f) version solving algorithm
 
 ## Setup
 
