@@ -86,155 +86,160 @@ class Constraint(enum.Enum):
 class Range:
     def __init__(self, range):
         if range.startswith("^"):
-            self.constraint, self.version = Constraint.MAJOR, Version(range[1:])
+            self._constraint, self._version = Constraint.MAJOR, Version(range[1:])
         elif range.startswith("~"):
-            self.constraint, self.version = Constraint.MINOR, Version(range[1:])
+            self._constraint, self._version = Constraint.MINOR, Version(range[1:])
         elif range.startswith("<="):
-            self.constraint, self.version = Constraint.LESS_THAN_OR_EQUAL, Version(
+            self._constraint, self._version = Constraint.LESS_THAN_OR_EQUAL, Version(
                 range[2:]
             )
         elif range.startswith(">="):
-            self.constraint, self.version = Constraint.GREATER_THAN_OR_EQUAL, Version(
+            self._constraint, self._version = Constraint.GREATER_THAN_OR_EQUAL, Version(
                 range[2:]
             )
         elif range.startswith("<"):
-            self.constraint, self.version = Constraint.LESS_THAN, Version(range[1:])
+            self._constraint, self._version = Constraint.LESS_THAN, Version(range[1:])
         elif range.startswith(">"):
-            self.constraint, self.version = Constraint.GREATER_THAN, Version(range[1:])
+            self._constraint, self._version = Constraint.GREATER_THAN, Version(
+                range[1:]
+            )
         else:
-            self.constraint, self.version = Constraint.EXACT, Version(range)
+            self._constraint, self._version = Constraint.EXACT, Version(range)
+
+    @property
+    def constraint(self):
+        return self._constraint
+
+    @property
+    def version(self):
+        return self._version
 
     def __str__(self):
-        if self.constraint == Constraint.MAJOR:
-            return "^" + str(self.version)
-        elif self.constraint == Constraint.MINOR:
-            return "~" + str(self.version)
-        elif self.constraint == Constraint.LESS_THAN_OR_EQUAL:
-            return "<=" + str(self.version)
-        elif self.constraint == Constraint.GREATER_THAN_OR_EQUAL:
-            return ">=" + str(self.version)
-        elif self.constraint == Constraint.LESS_THAN:
-            return "<" + str(self.version)
-        elif self.constraint == Constraint.GREATER_THAN:
-            return ">" + str(self.version)
+        if self._constraint == Constraint.MAJOR:
+            return "^" + str(self._version)
+        elif self._constraint == Constraint.MINOR:
+            return "~" + str(self._version)
+        elif self._constraint == Constraint.LESS_THAN_OR_EQUAL:
+            return "<=" + str(self._version)
+        elif self._constraint == Constraint.GREATER_THAN_OR_EQUAL:
+            return ">=" + str(self._version)
+        elif self._constraint == Constraint.LESS_THAN:
+            return "<" + str(self._version)
+        elif self._constraint == Constraint.GREATER_THAN:
+            return ">" + str(self._version)
         else:
-            return str(self.version)
+            return str(self._version)
 
     def __contains__(self, version):
         version = Version(version)
-        if self.constraint == Constraint.MAJOR:
+        if self._constraint == Constraint.MAJOR:
             clauses = [
-                version >= self.version,
-                version[0] == self.version[0],
+                version >= self._version,
+                version[0] == self._version[0],
             ]
             return all(clauses)
-        elif self.constraint == Constraint.MINOR:
+        elif self._constraint == Constraint.MINOR:
             clauses = [
-                version >= self.version,
-                version[0] == self.version[0],
-                version[1] == self.version[1],
+                version >= self._version,
+                version[0] == self._version[0],
+                version[1] == self._version[1],
             ]
             return all(clauses)
-        elif self.constraint == Constraint.LESS_THAN_OR_EQUAL:
-            return version <= self.version
-        elif self.constraint == Constraint.GREATER_THAN_OR_EQUAL:
-            return version >= self.version
-        elif self.constraint == Constraint.LESS_THAN:
-            return version < self.version
-        elif self.constraint == Constraint.GREATER_THAN:
-            return version > self.version
+        elif self._constraint == Constraint.LESS_THAN_OR_EQUAL:
+            return version <= self._version
+        elif self._constraint == Constraint.GREATER_THAN_OR_EQUAL:
+            return version >= self._version
+        elif self._constraint == Constraint.LESS_THAN:
+            return version < self._version
+        elif self._constraint == Constraint.GREATER_THAN:
+            return version > self._version
         else:
-            return version == self.version
+            return version == self._version
 
 
-class Relation(enum.Enum):
-    DISJOINT = enum.auto()
-    SUBSET = enum.auto()
-    OVERLAPPING = enum.auto()
-
-
-# satisfies    -> subset
-# satisfied by -> includes
-#
-# Term operations:
-# 1. Relation between terms (disjoint, subset, overlapping)
-#    - https://github.com/dart-lang/pub/blob/85aeff4c2f28ce55ac5cbf7be251c009e3829e30/lib/src/solver/term.dart#L45
-# 2. Intersection of two terms
-#    - https://github.com/dart-lang/pub/blob/85aeff4c2f28ce55ac5cbf7be251c009e3829e30/lib/src/solver/term.dart#L118
-# 3. Difference of two terms
-#    - https://github.com/dart-lang/pub/blob/85aeff4c2f28ce55ac5cbf7be251c009e3829e30/lib/src/solver/term.dart#L161
-# 4. Allows any
-# 5. Allows all
 class Term:
     def __init__(self, term):
         fields = re.split(r"[\s|]+", term)
 
-        self.is_positive = True
+        self._is_positive = True
         if fields[0] == "not":
-            self.is_positive = False
-            self.package, self.range = fields[1], Range(fields[2])
+            self._is_positive = False
+            self._package, self._range = fields[1], Range(fields[2])
         else:
-            self.package, self.range = fields[0], Range(fields[1])
+            self._package, self._range = fields[0], Range(fields[1])
 
     @classmethod
     def from_package_and_version(cls, package, version):
         return cls("{} {}".format(package, version))
 
+    @property
+    def is_positive(self):
+        return self._is_positive
+
+    @property
+    def package(self):
+        return self._package
+
+    @property
+    def range(self):
+        return self._range
+
     def __str__(self):
-        term = "{} {}".format(self.package, self.range)
-        if not self.is_positive:
+        term = "{} {}".format(self._package, self._range)
+        if not self._is_positive:
             term = "not " + term
         return term
 
     def negate(self):
-        self.is_positive = False
+        self._is_positive = False
         return self
 
-    def allows_all(self, other):
-        pass
-
-    def allows_any(self, other):
-        pass
-
-    def relation(self, other):
-        pass
-
-    def intersection(self, other):
-        pass
-
-    def difference(self, other):
-        pass
-
-    # True if this is a subset of other.
+    # Many ways to say the same thing:
+    # 1. True if self implies other.
+    # 2. True if self is a subset of other.
+    # 3. True if self being true means other must also be true.
+    # 4. True if other must be true whenever self is true.
     def satisfies(self, other):
-        return self.package == other.package and self.relation(other) == Relation.SUBSET
+        # return relation(self, other) == SUBSET
+        #   2x2 matrix of is_positive
+        #     7x7 matrix of constraints
+        pass
+
+
+class TermSet:
+    def __init__(self, *terms):
+        self._terms = [Term(term) for term in terms]
+
+    @property
+    def terms(self):
+        return self._terms
+
+    # We say that a set of terms S "satisfies" a term t if t must be true whenever every term in S is true.
+    def satisfies(self, term):
+        for t in self._terms:
+            if not t.satisfies(term):
+                return False
+        return True
 
 
 class Incompatibility:
-    def __init__(self, terms):
-        self.terms = [Term(term) for term in terms]
-        self.parents = []
+    def __init__(self, *terms):
+        self._terms = [Term(term) for term in terms]
+
+    @property
+    def terms(self):
+        return self._terms
 
     def __str__(self):
-        return "{" + ", ".join(str(term) for term in self.terms) + "}"
+        return "{" + ", ".join(str(term) for term in self._terms) + "}"
 
     # True if this incompatibility refers to a given package.
     def __contains__(self, package):
-        return any(package == term.package for term in self.terms)
+        return any(package == term._package for term in self._terms)
 
-    def unsatisfied_terms(self, version):
-        return [term for term in self.terms if version not in term]
-
-    # TODO: This should work for other terms (including ranges)
     # We say that a set of terms S satisfies an incompatibility I if S satisfies every term in I.
-    def satisfies(self, version):
-        return all(version in term for term in self.terms)
-
-    def contradicts(self, version):
-        return all(version not in term for term in self.terms)
-
-    def inconclusive(self, version):
-        return not self.satisfies(version) and not self.contradicts(self, version)
+    def satisfies(self, termset):
+        return all(termset.satisfies(term) for term in self._terms)
 
 
 class Category(enum.Enum):
@@ -257,18 +262,18 @@ class Assignment:
 
 class PartialSolution:
     def __init__(self):
-        self.solution = []
+        self._solution = []
+        # Track positive and negative assignments by package.
+        self._positive = {}
+        self._negative = {}
 
-    def add_decision(self, term):
+    def decide(self, term):
         assignment = Assignment(term, Category.DECISION)
-        self.solution.append(assignment)
+        self._solution.append(assignment)
 
-    def add_derivation(self, term):
+    def derive(self, term):
         assignment = Assignment(term, Category.DERIVATION)
-        self.solution.append(assignment)
-
-    def relation(self, term):
-        pass
+        self._solution.append(assignment)
 
     # If a partial solution has, for every positive derivation,
     # a corresponding decision that satisfies that assignment,
@@ -279,24 +284,24 @@ class PartialSolution:
 
 class Registry:
     def __init__(self, packages):
-        self.packages = packages
+        self._packages = packages
 
     def package_versions(self, package):
-        return self.packages[package].keys()
+        return self._packages[package].keys()
 
     def package_version_dependencies(self, package, version):
-        return self.packages[package][version]
+        return self._packages[package][version]
 
 
 class Solver:
     def __init__(self, registry):
-        self.registry = registry
-        self.solution = PartialSolution()
-        self.incompatibilities = []
+        self._registry = registry
+        self._solution = PartialSolution()
+        self._incompatibilities = []
 
     def solve(self, package, version):
         root = Term.from_package_and_version(package, version)
-        self.incompatibilities.append(root.negate())
+        self._incompatibilities.append(root.negate())
 
         next = package
         while True:
@@ -310,28 +315,17 @@ class Solver:
             package = changed.pop()
             incompatibilities = [
                 incompatibility
-                for incompatibility in self.incompatibilities
+                for incompatibility in self._incompatibilities
                 if package in incompatibility
             ]
             incompatibilities = reversed(incompatibilities)
             for incompatibility in incompatibilities:
-                unsatisfied = None
-                for term in incompatibility.terms:
-                    relation = self.solution.relation(incompatibility)
-                    if relation == Relation.DISJOINT:
-                        break
-                    elif relation == Relation.OVERLAPPING:
-                        if unsatisfied is not None:
-                            break
-                        unsatisfied = term
-
-                if unsatisfied is None:
-                    raise Exception("conflict resolution")
-
-                self.solution.add_derivation(unsatisfied)
-                changed.add(unsatisfied.package)
+                pass
 
     def _decision_making(next):
+        pass
+
+    def _conflict_resolution():
         pass
 
 
