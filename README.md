@@ -6,6 +6,14 @@ Exploring the [PubGrub](https://nex3.medium.com/pubgrub-2fb6470504f) version sol
 
 This project depends on the [Python](https://www.python.org/) programming language.
 
+## Running
+
+The main example program can be run via:
+
+```
+python3 pubgrub.py
+```
+
 ## Testing
 
 Tests can be run via:
