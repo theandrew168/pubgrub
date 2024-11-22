@@ -1,3 +1,4 @@
+from collections import defaultdict
 import copy
 import enum
 import re
@@ -157,6 +158,16 @@ class Range:
             return version == self._version
 
 
+class Relation(enum.Enum):
+    SUBSET = enum.auto()
+    DISJOINT = enum.auto()
+    OVERLAPPING = enum.auto()
+
+
+class MismatchedPackageError(Exception):
+    pass
+
+
 class Term:
     def __init__(self, term):
         fields = re.split(r"[\s|]+", term)
@@ -190,9 +201,90 @@ class Term:
             term = "not " + term
         return term
 
-    def negate(self):
-        self._is_positive = False
-        return self
+    def inverse(self):
+        new = Term(str(self))
+        new._is_positive = not new._is_positive
+        return new
+
+    def intersect(self, other):
+        if self.package != other.package:
+            raise MismatchedPackageError
+
+        raise NotImplementedError
+
+    def union(self, other):
+        if self.package != other.package:
+            raise MismatchedPackageError
+
+        raise NotImplementedError
+
+    def difference(self, other):
+        if self.package != other.package:
+            raise MismatchedPackageError
+
+        raise NotImplementedError
+
+    # Relation between self and other: is self a subset of other?
+    def relation(self, other):
+        if self.package != other.package:
+            raise MismatchedPackageError
+
+        # 2x2 matrix of is_positive
+        #   7x7 matrix of constraints
+        #     this needs a clever solution: something with allows_all and allows_any (wrt ranges)
+
+        # + self, + other
+        if self.is_positive and other.is_positive:
+            # EXACT, EXACT
+            if (
+                self.range.constraint == Constraint.EXACT
+                and other.range.constraint == Constraint.EXACT
+            ):
+                if self.range.version == other.range.version:
+                    return Relation.SUBSET
+                else:
+                    return Relation.DISJOINT
+            else:
+                raise NotImplementedError
+        # + self, - other
+        elif self.is_positive and not other.is_positive:
+            # EXACT, EXACT
+            if (
+                self.range.constraint == Constraint.EXACT
+                and other.range.constraint == Constraint.EXACT
+            ):
+                if self.range.version == other.range.version:
+                    return Relation.DISJOINT
+                else:
+                    return Relation.SUBSET
+            else:
+                raise NotImplementedError
+        # - self, + other
+        elif not self.is_positive and other.is_positive:
+            # EXACT, EXACT
+            if (
+                self.range.constraint == Constraint.EXACT
+                and other.range.constraint == Constraint.EXACT
+            ):
+                if self.range.version == other.range.version:
+                    return Relation.DISJOINT
+                else:
+                    return Relation.SUBSET
+            else:
+                raise NotImplementedError
+        # - self, - other
+        elif not self.is_positive and not other.is_positive:
+            # EXACT, EXACT
+            if (
+                self.range.constraint == Constraint.EXACT
+                and other.range.constraint == Constraint.EXACT
+            ):
+                if self.range.version == other.range.version:
+                    return Relation.SUBSET
+                else:
+                    return Relation.DISJOINT
+            else:
+                raise NotImplementedError
 
     # Many ways to say the same thing:
     # 1. True if self implies other.
@@ -200,10 +292,10 @@ class Term:
     # 3. True if self being true means other must also be true.
     # 4. True if other must be true whenever self is true.
     def satisfies(self, other):
-        # return relation(self, other) == SUBSET
-        #   2x2 matrix of is_positive
-        #     7x7 matrix of constraints
-        pass
+        if self.package != other.package:
+            raise MismatchedPackageError
+
+        return self.relation(other) == Relation.SUBSET
 
 
 class TermSet:
@@ -224,7 +316,7 @@ class TermSet:
 
 class Incompatibility:
     def __init__(self, *terms):
-        self._terms = [Term(term) for term in terms]
+        self._terms = [Term(term) if type(term) is str else term for term in terms]
 
     @property
     def terms(self):
@@ -236,6 +328,9 @@ class Incompatibility:
     # True if this incompatibility refers to a given package.
     def __contains__(self, package):
         return any(package == term._package for term in self._terms)
+
+    def __iter__(self):
+        return iter(self._terms)
 
     # We say that a set of terms S satisfies an incompatibility I if S satisfies every term in I.
     def satisfies(self, termset):
@@ -249,7 +344,7 @@ class Category(enum.Enum):
 
 class Assignment:
     def __init__(self, term, category):
-        self.term = Term(term)
+        self.term = Term(term) if type(term) is str else term
         self.category = category
         # cause is an incompat
         self.cause = None
@@ -257,23 +352,56 @@ class Assignment:
 
     def __str__(self):
         category = "DECISION" if self.category == Category.DECISION else "DERIVATION"
-        return "{} - {}".format(category, str(self.term))
+        return "{} ({})".format(str(self.term), category)
 
 
 class PartialSolution:
     def __init__(self):
         self._solution = []
-        # Track positive and negative assignments by package.
+        # Track positive and negative assignments by package (one per package).
         self._positive = {}
         self._negative = {}
+
+    def __iter__(self):
+        return iter(self._solution)
 
     def decide(self, term):
         assignment = Assignment(term, Category.DECISION)
         self._solution.append(assignment)
 
+        # TODO: intersect pos, union neg assignments for the same package
+        if term.is_positive:
+            self._positive[term.package] = term
+        else:
+            self._negative[term.package] = term
+
     def derive(self, term):
         assignment = Assignment(term, Category.DERIVATION)
         self._solution.append(assignment)
+
+        # TODO: intersect pos, union neg assignments for the same package
+        if term.is_positive:
+            self._positive[term.package] = term
+        else:
+            self._negative[term.package] = term
+
+    def relation(self, term):
+        # If we have a positive assign for the term, apply it.
+        pos = self._positive.get(term.package)
+        if pos:
+            return pos.relation(term)
+
+        # If we have a negative assign for the term, apply it.
+        neg = self._negative.get(term.package)
+        if neg:
+            return neg.relation(term)
+
+        # Otherwise, we haven't seen the package yet which means
+        # we can accept any version of it.
+        return Relation.OVERLAPPING
+
+    def satisfies(self, term):
+        return self.relation(term) == Relation.SUBSET
 
     # If a partial solution has, for every positive derivation,
     # a corresponding decision that satisfies that assignment,
@@ -299,15 +427,25 @@ class Solver:
         self._solution = PartialSolution()
         self._incompatibilities = []
 
+    def debug(self):
+        print("=== SOLUTION ===")
+        for s in self._solution:
+            print(s)
+
+        print("=== INCOMPATS ===")
+        for i in self._incompatibilities:
+            print(i)
+
     def solve(self, package, version):
         root = Term.from_package_and_version(package, version)
-        self._incompatibilities.append(root.negate())
+        self._incompatibilities.append(Incompatibility(root.inverse()))
 
         next = package
-        while True:
+        while next:
             self._unit_propagation(next)
             next = self._decision_making(next)
-            break
+
+        return [a.term for a in self._solution if a.category == Category.DECISION]
 
     def _unit_propagation(self, next):
         changed = {next}
@@ -318,73 +456,137 @@ class Solver:
                 for incompatibility in self._incompatibilities
                 if package in incompatibility
             ]
-            incompatibilities = reversed(incompatibilities)
+            incompatibilities = list(reversed(incompatibilities))
+            print(
+                "checking {} incompat(s) for: {}".format(
+                    len(incompatibilities), package
+                )
+            )
             for incompatibility in incompatibilities:
-                pass
+                unsat = [
+                    term
+                    for term in incompatibility
+                    if not self._solution.satisfies(term)
+                ]
+                if not unsat:
+                    raise Exception("conflict resolution")
 
-    def _decision_making(next):
-        pass
+                if len(unsat) == 1:
+                    term = unsat[0]
+                    self._solution.derive(term.inverse())
+                    # TODO: Why is this infinite looping?
+                    # changed.add(term.package)
+
+    def _check_almost_satisfies(self, incompatibility):
+        unsat = [term for term in incompatibility if not self._solution.satisfies(term)]
+        if not unsat:
+            raise Exception("conflict resolution")
+
+        if len(unsat) == 1:
+            return unsat[0]
+
+        return None
+
+    def _decision_making(self, next):
+        categories_by_package = defaultdict(list)
+        for assignment in self._solution:
+            categories_by_package[assignment.term.package].append(assignment.category)
+
+        package = None
+        for choice, categories in categories_by_package.items():
+            if (
+                Category.DERIVATION in categories
+                and Category.DECISION not in categories
+            ):
+                package = choice
+                break
+
+        if package is None:
+            return None
+
+        version = None
+        versions = self._registry.package_versions(package)
+        for choice in versions:
+            if self._solution.satisfies(Term.from_package_and_version(package, choice)):
+                version = choice
+                break
+
+        term = Term.from_package_and_version(package, version)
+        deps = self._registry.package_version_dependencies(package, version)
+        for k, v in deps.items():
+            incompat = Incompatibility(
+                term, Term.from_package_and_version(k, v).inverse()
+            )
+            self._incompatibilities.append(incompat)
+
+        self._solution.decide(term)
+        return package
 
     def _conflict_resolution():
         pass
 
 
-# if __name__ == '__main__':
-# 	packages = {
-# 		'root': {
-# 			'1.0.0': {
-# 				'foo': '^1.0.0',
-# 			},
-# 		},
-# 		'foo': {
-# 			'1.0.0': {
-# 				'bar': '^1.0.0',
-# 			},
-# 		},
-# 		'bar': {
-# 			'1.0.0': {},
-# 			'2.0.0': {},
-# 		},
-# 	}
-# 	registry = Registry(packages)
-# 	print(registry.package_versions('root'))
-# 	print(registry.package_version_dependencies('root', '1.0.0'))
-
-
 if __name__ == "__main__":
-    v1 = Version("1.0.0")
-    print(v1)
-    v2 = Version("1.0")
-    print(v2)
-    v3 = Version("1.0.1")
+    packages = {
+        "root": {
+            "1.0.0": {
+                "foo": "1.0.0",
+            },
+        },
+        "foo": {
+            "1.0.0": {
+                "bar": "1.0.0",
+            },
+        },
+        "bar": {
+            "1.0.0": {},
+            "2.0.0": {},
+        },
+    }
+    registry = Registry(packages)
+    # print(registry.package_versions("root"))
+    # print(registry.package_version_dependencies("root", "1.0.0"))
 
-    print("v1 == v2", v1 == v2)
-    print("v1 <= v2", v1 <= v2)
-    print("v1 >= v2", v1 >= v2)
-    print("v1 < v2", v1 < v2)
-    print("v1 > v2", v1 > v2)
+    solver = Solver(registry)
+    solution = solver.solve("root", "1.0.0")
+    solver.debug()
 
-    print("v1 == v3", v1 == v3)
-    print("v1 <= v3", v1 <= v3)
-    print("v1 >= v3", v1 >= v3)
-    print("v1 < v3", v1 < v3)
-    print("v1 > v3", v1 > v3)
+    print("=== SOLUTION ===")
+    for s in solution:
+        print(s)
 
-    r1 = Range("^1.0.0")
-    print("1.0.0 in ^1.0.0", "1.0.0" in r1)
-    print("2.0.0 in ^1.0.0", "2.0.0" in r1)
-    print("1.5.0 in ^1.0.0", "1.5.0" in r1)
 
-    t1 = Term("root 1.0.0")
-    print(t1)
-    t2 = Term("foo ^1.0.0 || ^2.0.0")
-    print(t2)
-    print("1.0.0 in ^1.0.0 || ^2.0.0", "1.0.0" in t2)
-    print("2.0.0 in ^1.0.0 || ^2.0.0", "2.0.0" in t2)
-    print("3.0.0 in ^1.0.0 || ^2.0.0", "3.0.0" in t2)
+# if __name__ == "__main__":
+#     v1 = Version("1.0.0")
+#     print(v1)
+#     v2 = Version("1.0")
+#     print(v2)
+#     v3 = Version("1.0.1")
 
-    i1 = Incompatibility(["root 1.0.0", "not foo ^1.0.0"])
-    print(i1)
+#     print("v1 == v2", v1 == v2)
+#     print("v1 <= v2", v1 <= v2)
+#     print("v1 >= v2", v1 >= v2)
+#     print("v1 < v2", v1 < v2)
+#     print("v1 > v2", v1 > v2)
 
-    a1 = Assignment("root 1.0.0", "decision")
-    print(a1)
+#     print("v1 == v3", v1 == v3)
+#     print("v1 <= v3", v1 <= v3)
+#     print("v1 >= v3", v1 >= v3)
+#     print("v1 < v3", v1 < v3)
+#     print("v1 > v3", v1 > v3)
+
+#     r1 = Range("^1.0.0")
+#     print("1.0.0 in ^1.0.0", "1.0.0" in r1)
+#     print("2.0.0 in ^1.0.0", "2.0.0" in r1)
+#     print("1.5.0 in ^1.0.0", "1.5.0" in r1)
+
+#     t1 = Term("root 1.0.0")
+#     print(t1)
+#     t2 = Term("not foo ^1.0.0")
+#     print(t2)
+
+#     i1 = Incompatibility("root 1.0.0", "not foo ^1.0.0")
+#     print(i1)
+
+#     a1 = Assignment("root 1.0.0", Category.DECISION)
+#     print(a1)
